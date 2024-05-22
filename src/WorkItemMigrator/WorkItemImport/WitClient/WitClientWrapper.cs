@@ -20,8 +20,8 @@ namespace WorkItemImport
     public class WitClientWrapper : IWitClientWrapper
     {
         // Cache fields
-        private ConcurrentDictionary<string, TeamProject> _projectCache = new ConcurrentDictionary<string, TeamProject>();
-        private ConcurrentDictionary<string, GitRepository> _repositoryCache = new ConcurrentDictionary<string, GitRepository>();
+        private readonly ConcurrentDictionary<string, TeamProject> _projectCache = new ConcurrentDictionary<string, TeamProject>();
+        private readonly ConcurrentDictionary<string, GitRepository> _repositoryCache = new ConcurrentDictionary<string, GitRepository>();
 
         private WorkItemTrackingHttpClient WitClient { get; }
         private ProjectHttpClient ProjectClient { get; }
@@ -104,7 +104,13 @@ namespace WorkItemImport
 
         public WorkItem UpdateWorkItem(JsonPatchDocument patchDocument, int workItemId, bool suppressNotifications)
         {
-            return WitClient.UpdateWorkItemAsync(document: patchDocument, id: workItemId, suppressNotifications, bypassRules: true, expand: WorkItemExpand.All).Result;
+            return WitClient.UpdateWorkItemAsync(
+                document: patchDocument,
+                id: workItemId,
+                suppressNotifications: suppressNotifications,
+                bypassRules: true,
+                expand: WorkItemExpand.All
+            ).Result;
         }
 
         public TeamProject GetProject(string projectId)
