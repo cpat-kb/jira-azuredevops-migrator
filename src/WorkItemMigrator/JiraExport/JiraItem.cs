@@ -599,6 +599,14 @@ namespace JiraExport
         }
         public string Parent { get { return RemoteIssue.ExValue<string>("$.fields.parent.key"); } }
         public List<string> SubItems { get { return GetSubTasksKey(); } }
+        public string Rank
+        {
+            get
+            {
+                var rank = RemoteIssue.SelectToken("$.fields.customfield_10023")?.Value<string>();
+                return rank;
+            }
+        }
 
         public JObject RemoteIssue { get; private set; }
         public List<JiraRevision> Revisions { get; set; }

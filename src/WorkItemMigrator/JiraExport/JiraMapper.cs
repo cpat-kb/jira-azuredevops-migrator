@@ -48,6 +48,21 @@ namespace JiraExport
                     var revisions = issue.Revisions.Select(r => MapRevision(r)).ToList();
                     wiItem.OriginId = issue.Key;
                     wiItem.Type = type;
+                    wiItem.BacklogPriority = FieldMapperUtils.MapLexoRank(issue.Rank).ToString();
+                    wiItem.StackRank = wiItem.BacklogPriority;
+
+                    revisions.First().Fields.Add(new WiField()
+                    {
+                        ReferenceName = WiFieldReference.BacklogPriority,
+                        Value = wiItem.BacklogPriority
+                    });
+
+                    revisions.First().Fields.Add(new WiField()
+                    {
+                        ReferenceName = WiFieldReference.StackRank,
+                        Value = wiItem.StackRank
+                    });
+
                     wiItem.Revisions = revisions;
                 }
                 else

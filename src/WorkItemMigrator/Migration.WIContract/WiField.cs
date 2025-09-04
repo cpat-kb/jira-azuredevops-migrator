@@ -36,6 +36,8 @@
         public static string History => "System.History";
         public static string Reason => "System.Reason";
         public static string Priority => "System.Priority";
+        public static string BacklogPriority => "Microsoft.VSTS.Common.BacklogPriority";
+        public static string StackRank => "Microsoft.VSTS.Common.StackRank";
         public static string BoardColumn => "System.BoardColumn";
         public static string BoardColumnDone => "System.BoardColumnDone";
         public static string BoardLane => "System.BoardLane";
