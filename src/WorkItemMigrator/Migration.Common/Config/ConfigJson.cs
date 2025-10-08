@@ -81,11 +81,17 @@ namespace Common.Config
         [JsonProperty(PropertyName = "include-jira-css-styles")]
         public bool IncludeJiraCssStyles { get; set; } = false;
 
+        [JsonProperty(PropertyName = "changeddate-bump-ms")]
+        public int ChangedDateBumpMS { get; set; } = 2;
+
         [JsonProperty(PropertyName = "ignore-empty-revisions")]
         public bool IgnoreEmptyRevisions { get; set; } = false;
 
         [JsonProperty(PropertyName = "suppress-notifications")]
         public bool SuppressNotifications { get; set; } = false;
-        
+
+        [JsonProperty(PropertyName = "jira-api-version")]
+        public int JiraApiVersion { get; set; } = 3;
+
     }
 }

@@ -88,10 +88,10 @@ namespace JiraExport
                     var mappedValue = (from s in item.Mapping.Values where s.Source == value.ToString() select s.Target).FirstOrDefault();
                     if (string.IsNullOrEmpty(mappedValue))
                     {
-                        Logger.Log(LogLevel.Warning, $"Missing mapping value '{value}' for field '{itemSource}' for item type '{r.Type}'.");
+                        Logger.Log(LogLevel.Warning, $"Missing mapping value '{value}' for field '{itemSource}' for item type '{targetWit}'.");
                         if(itemSource == "status")
                         {
-                            exportIssuesSummary.AddUnmappedIssueState(r.Type, value.ToString());
+                            exportIssuesSummary.AddUnmappedIssueState(targetWit, value.ToString());
                         }
                     }
                     return (true, mappedValue);
@@ -174,11 +174,32 @@ namespace JiraExport
             if (string.IsNullOrWhiteSpace(iterationPathsString))
                 return null;
 
+            // For certain configurations of Jira, the entire Sprint object is returned by the
+            // fields Rest API instead of the Sprint name
+            if (iterationPathsString.StartsWith("com.atlassian.greenhopper.service.sprint.Sprint@"))
+            {
+                Regex regex = new Regex(@",name=([^,]+),");
+                Match match = regex.Match(iterationPathsString);
+                if (match.Success)
+                {
+                    iterationPathsString = match.Groups[1].Value;
+                }
+                else
+                {
+                    Logger.Log(LogLevel.Error, "Missing 'name' property for Sprint object. "
+                        + $"Skipping mapping this sprint. The full object was: '{iterationPathsString}'."
+                        );
+                }
+            }
+
             var iterationPaths = iterationPathsString.Split(',').AsEnumerable();
             iterationPaths = iterationPaths.Select(ip => ip.Trim());
             var iterationPath = iterationPaths.Last();
 
             iterationPath = ReplaceAzdoInvalidCharacters(iterationPath);
+
+            // Remove leading and trailing spaces, since these will be stripped by the Azure DevOps classification nodes Rest API
+            iterationPath = iterationPath.Trim();
 
             return iterationPath;
         }

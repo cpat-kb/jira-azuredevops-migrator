@@ -16,6 +16,7 @@ namespace WorkItemImport
     {
         private CommandLineApplication commandLineApplication;
         private string[] args;
+        private List<ExecutionPlan.ExecutionItem> deferredExecutionItems = new List<ExecutionPlan.ExecutionItem>();
 
         public ImportCommandLine(params string[] args)
         {
@@ -92,7 +93,8 @@ namespace WorkItemImport
                     IncludeLinkComments = config.IncludeLinkComments,
                     IncludeDevelopmentLinks = config.IncludeDevelopmentLinks,
                     FieldMap = config.FieldMap,
-                    SuppressNotifications = config.SuppressNotifications
+                    SuppressNotifications = config.SuppressNotifications,
+                    ChangedDateBumpMS = config.ChangedDateBumpMS
                 };
 
                 // initialize Azure DevOps/TFS connection. Creates/fetches project, fills area and iteration caches.
@@ -112,11 +114,23 @@ namespace WorkItemImport
 
                 BeginSession(configFileName, config, forceFresh, agent, itemCount, revisionCount);
 
-                while (plan.TryPop(out ExecutionPlan.ExecutionItem executionItem))
+                while (plan.ReferenceQueue.Count > 0 || deferredExecutionItems.Count > 0)
                 {
+                    ExecutionPlan.ExecutionItem executionItem = null;
                     try
                     {
-                        if (!forceFresh && context.Journal.IsItemMigrated(executionItem.OriginId, executionItem.Revision.Index))
+                        executionItem = GetDeferredItemIfAvailable(plan, executionItem);
+
+                        if (executionItem == null)
+                        {
+                            plan.TryPop(out executionItem);
+                        }
+
+                        if (
+                            !forceFresh
+                            && !executionItem.isDeferred
+                            && context.Journal.IsItemMigrated(executionItem.OriginId, executionItem.Revision.Index)
+                        )
                         {
                             continue;
                         }
@@ -124,9 +138,23 @@ namespace WorkItemImport
                         WorkItem wi = null;
 
                         if (executionItem.WiId > 0)
+                        {
                             wi = agent.GetWorkItem(executionItem.WiId);
+                            if (wi == null)
+                            {
+                                Logger.Log(LogLevel.Error, $"Tried fetching work item with id={executionItem.WiId}, " +
+                                    "but that work item does not exist on the target ADO organization/collection. " +
+                                    "Perhaps the item has been deleted manually? If so, the ItemsJournal.txt file " +
+                                    "is no longer valid. Please delete the work items in the target project and " +
+                                    "rerun the wi-import, or run the import with --force enabled."
+                                );
+                                continue;
+                            }
+                        }
                         else
+                        {
                             wi = agent.CreateWorkItem(executionItem.WiType, settings.SuppressNotifications, executionItem.Revision.Time, executionItem.Revision.Author);
+                        }
 
                         Logger.Log(LogLevel.Info, $"Processing {importedItems + 1}/{revisionCount} - wi '{(wi.Id > 0 ? wi.Id.ToString() : "Initial revision")}', jira '{executionItem.OriginId}, rev {executionItem.Revision.Index}'.");
 
@@ -142,7 +170,14 @@ namespace WorkItemImport
                             continue;
                         }
 
-                        agent.ImportRevision(executionItem.Revision, wi, settings);
+                        try
+                        {
+                            agent.ImportRevision(executionItem.Revision, wi, settings);
+                        }
+                        catch (AttachmentNotFoundException)
+                        {
+                            importedItems = DeferItem(importedItems, executionItem);
+                        }
 
                         // Artifical wait (optional) to avoid throttling for ADO Services
                         if (config.SleepTimeBetweenRevisionImportMilliseconds > 0)
@@ -183,6 +218,44 @@ namespace WorkItemImport
                 EndSession(itemCount, revisionCount, sw);
             }
             return succeeded;
+        }
+
+        private int DeferItem(int importedItems, ExecutionPlan.ExecutionItem executionItem)
+        {
+            if (!executionItem.isDeferred)
+            {
+                executionItem.Revision.Time = executionItem.Revision.Time.AddMinutes(5);
+                executionItem.isDeferred = true;
+                deferredExecutionItems.Add(executionItem);
+                importedItems--;
+            }
+
+            return importedItems;
+        }
+
+        private ExecutionPlan.ExecutionItem GetDeferredItemIfAvailable(ExecutionPlan plan, ExecutionPlan.ExecutionItem executionItem)
+        {
+            foreach (var executionItemDeferred in deferredExecutionItems)
+            {
+                if (plan.TryPeek(out var nextItem))
+                {
+                    if (executionItemDeferred.Revision.Time < nextItem.Revision.Time)
+                    {
+                        executionItem = executionItemDeferred;
+                        deferredExecutionItems.Remove(executionItem);
+                        executionItem.Revision.Time = nextItem.Revision.Time.AddMilliseconds(-5);
+                        break;
+                    }
+                }
+                else
+                {
+                    executionItem = executionItemDeferred;
+                    deferredExecutionItems.Remove(executionItem);
+                    break;
+                }
+            }
+
+            return executionItem;
         }
 
         private static void BeginSession(string configFile, ConfigJson config, bool force, Agent agent, int itemsCount, int revisionCount)

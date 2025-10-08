@@ -21,6 +21,7 @@ The migration configuration file is defined in a json file with the properties d
 |**target-project**|True|string|Name of the project to migrate to.|
 |**query**|True|string|Name of the JQL query to use for identifying work items to migrate.|
 |**using-jira-cloud**|False|boolean|Set to False if connected to Jira Server instance, by default it is True|
+|**jira-api-version**|False|integer|Version of the Jira API to use. Must be either **2** or **3**. Default: 3.|
 |**workspace**|True|string|Location where logs and export data are saved on disk.|
 |**epic-link-field**|False|string|Jira name of epic link field. Default = "Epic Link". **Note:** requires customization per account and sometimes project|
 |**sprint-field**|False|string|Jira name of sprint field. Default = "Sprint". **Note:** requires customization per account and sometimes project|
@@ -29,8 +30,8 @@ The migration configuration file is defined in a json file with the properties d
 |**log-level**|False|string|Debug, Info, Warning, Error or Critical. Default = "Debug".|
 |**attachment-folder**|True|string|Location to store attachments.|
 |**user-mapping-file**|False|string|Name of user mapping file. If no specific path is set the program expects it to be located in the "workspace" folder.|
-|**base-area-path**|False|string|Area path. Default is empty.|
-|**base-iteration-path**|False|string|Iteration path. Default is empty.|
+|**base-area-path**|False|string|The root area path under which all migrated work items will be placed. Default is empty.|
+|**base-iteration-path**|False|string|The root iteration path for the migrated work items. Default is empty.|
 |**ignore-failed-links**|False|boolean|Set to True if failed links are to be ignored. Default = False.|
 |**include-link-comments**|False|boolean|Set to True to get a verbose comment on the work item for every work item link created. Default = True.|
 |**include-jira-css-styles**|True|boolean|Set to True to generate and include confluence CSS Stylesheets for description, repro steps and comments. Default = True.|
@@ -38,6 +39,7 @@ The migration configuration file is defined in a json file with the properties d
 |**suppress-notifications**|False|boolean|Set to True to suppress all notifications in Azure DevOps about created and updated Work Items. Default = False.|
 |**include-development-links**|False|boolean|Set to True to migrated commit links from Jira to Azure DevOps. You will also need to fill out the **repository-map** property. Default = False.|
 |**sleep-time-between-revision-import-milliseconds**|False|integer|How many milliseconds to sleep between each revision import. Use this if throttling is an issue for ADO Services. Default = 0 (no sleep).|
+|**changeddate-bump-ms**|False|integer|How many milliseconds to buffer each subsequent revision if there is a negative revision timestamp offset. Increase this if you get a lot of VS402625 warning messages during the import. Default = 2 (ms).|
 |**process-template**|False|string|Process template in the target DevOps project. Supported values: Scrum, Agile or CMMI. Default = "Scrum".|
 |**link-map**|True|json|List of **links** to map between Jira and Azure DevOps/TFS work item link types.|
 |**type-map**|True|json|List of the work item **types** you want to migrate from Jira to Azure DevOps/TFS.|

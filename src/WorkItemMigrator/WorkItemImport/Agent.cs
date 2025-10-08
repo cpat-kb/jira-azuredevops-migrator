@@ -96,20 +96,6 @@ namespace WorkItemImport
                     _witClientUtils.CorrectComment(wi, _context.GetItem(rev.ParentOriginId), rev, _context.Journal.IsAttachmentMigrated);
                 }
 
-                if (wi.Fields.ContainsKey(WiFieldReference.AcceptanceCriteria) && !string.IsNullOrEmpty(wi.Fields[WiFieldReference.AcceptanceCriteria].ToString()))
-                {
-                    Logger.Log(LogLevel.Debug, $"Correcting acceptance criteria on separate revision on '{rev}'.");
-
-                    try
-                    {
-                        _witClientUtils.CorrectAcceptanceCriteria(wi, _context.GetItem(rev.ParentOriginId), rev, _context.Journal.IsAttachmentMigrated);
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Log(ex, $"Failed to correct acceptance criteria for '{wi.Id}', rev '{rev}'.");
-                    }
-                }
-
                 _witClientUtils.SaveWorkItemAttachments(rev, wi, settings);
 
                 foreach (string attOriginId in rev.Attachments.Select(wiAtt => wiAtt.AttOriginId))
@@ -126,9 +112,31 @@ namespace WorkItemImport
                     {
                         _witClientUtils.CorrectDescription(wi, _context.GetItem(rev.ParentOriginId), rev, _context.Journal.IsAttachmentMigrated);
                     }
+                    catch (AttachmentNotFoundException)
+                    {
+                        throw;
+                    }
                     catch (Exception ex)
                     {
                         Logger.Log(ex, $"Failed to correct description for '{wi.Id}', rev '{rev}'.");
+                    }
+
+                    if (wi.Fields.ContainsKey(WiFieldReference.AcceptanceCriteria) && !string.IsNullOrEmpty(wi.Fields[WiFieldReference.AcceptanceCriteria].ToString()))
+                    {
+                        Logger.Log(LogLevel.Debug, $"Correcting acceptance criteria on separate revision on '{rev}'.");
+
+                        try
+                        {
+                            _witClientUtils.CorrectAcceptanceCriteria(wi, _context.GetItem(rev.ParentOriginId), rev, _context.Journal.IsAttachmentMigrated);
+                        }
+                        catch (AttachmentNotFoundException)
+                        {
+                            throw;
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Log(ex, $"Failed to correct acceptance criteria for '{wi.Id}', rev '{rev}'.");
+                        }
                     }
 
                     // Correct other HTMl fields than description
@@ -151,6 +159,10 @@ namespace WorkItemImport
                                     field.Target,
                                     _context.Journal.IsAttachmentMigrated
                                 );
+                            }
+                            catch (AttachmentNotFoundException)
+                            {
+                                throw;
                             }
                             catch (Exception ex)
                             {
@@ -190,6 +202,10 @@ namespace WorkItemImport
             {
                 throw;
             }
+            catch (AttachmentNotFoundException)
+            {
+                throw;
+            }
             catch (FileNotFoundException ex)
             {
                 Logger.Log(LogLevel.Error, ex.Message);
@@ -212,7 +228,7 @@ namespace WorkItemImport
 
             var agent = new Agent(context, settings, restConnection);
 
-            var witClientWrapper = new WitClientWrapper(settings.Account, settings.Project, settings.Pat);
+            var witClientWrapper = new WitClientWrapper(settings.Account, settings.Project, settings.Pat, settings.ChangedDateBumpMS);
             agent._witClientUtils = new WitClientUtils(witClientWrapper);
 
             // check if projects exists, if not create it
@@ -269,7 +285,7 @@ namespace WorkItemImport
         internal async Task<TeamProject> GetOrCreateProjectAsync()
         {
             ProjectHttpClient projectClient = RestConnection.GetClient<ProjectHttpClient>();
-            Logger.Log(LogLevel.Info, "Retreiving project info from Azure DevOps/TFS...");
+            Logger.Log(LogLevel.Info, "Retrieving project info from Azure DevOps/TFS...");
             TeamProject project = null;
 
             try
@@ -644,8 +660,19 @@ namespace WorkItemImport
         {
             bool success = true;
 
-            foreach (var link in rev.Links)
+            var saveLinkTimestamp = rev.Time;
+            if(rev.Fields.Count > 0)
             {
+                // If this revision already has any fields, defer the link import by 2 miliseconds. Otherwise the Work Items API will
+                // send the response: "VS402625: Dates must be increasing with each revision"
+                saveLinkTimestamp = saveLinkTimestamp.AddMilliseconds(2);
+                // This needs to be set so that ApplyFields gets a later date, later on in the revision import
+                wi.Fields[WiFieldReference.ChangedDate] = saveLinkTimestamp.AddMilliseconds(2);
+            }
+            
+            for (int i = 0; i < rev.Links.Count; i++)
+            {
+                var link = rev.Links[i];
                 try
                 {
                     int sourceWiId = _context.Journal.GetMigratedId(link.SourceOriginId);
@@ -664,11 +691,20 @@ namespace WorkItemImport
                         continue;
                     }
 
-                    if (link.Change == ReferenceChangeType.Added && !_witClientUtils.AddAndSaveLink(link, wi, settings))
+                    if (i > 0)
+                    {
+                        // If this has multiple link updates, defer each ubsequent link import by 2 miliseconds.
+                        // Otherwise the Work Items API will send the response: "VS402625: Dates must be increasing with each revision"
+                        saveLinkTimestamp = saveLinkTimestamp.AddMilliseconds(2);
+                        // This needs to be set so that ApplyFields gets a later date, later on in the revision import
+                        wi.Fields[WiFieldReference.ChangedDate] = saveLinkTimestamp.AddMilliseconds(2);
+                    }
+
+                    if (link.Change == ReferenceChangeType.Added && !_witClientUtils.AddAndSaveLink(link, wi, settings, rev.Author, saveLinkTimestamp))
                     {
                         success = false;
                     }
-                    else if (link.Change == ReferenceChangeType.Removed && !_witClientUtils.RemoveAndSaveLink(link, wi, settings))
+                    else if (link.Change == ReferenceChangeType.Removed && !_witClientUtils.RemoveAndSaveLink(link, wi, settings, rev.Author, saveLinkTimestamp))
                     {
                         success = false;
                     }

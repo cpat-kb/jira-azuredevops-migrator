@@ -220,16 +220,14 @@ namespace JiraExport
 
         private static List<JiraRevision> BuildCommentRevisions(JiraItem jiraItem, IJiraProvider jiraProvider)
         {
-            var renderedFields = jiraItem.RemoteIssue.SelectToken("$.renderedFields.comment.comments");
             var comments = jiraProvider.GetCommentsByItemKey(jiraItem.Key);
             return comments.Select((c, i) =>
             {
-                var rc = renderedFields.SelectToken($"$.[{i}].body");
-                return BuildCommentRevision(c, rc, jiraItem);
+                return BuildCommentRevision(c, c.RenderedBody, jiraItem);
             }).ToList();
         }
 
-        private static JiraRevision BuildCommentRevision(Comment c, JToken rc, JiraItem jiraItem)
+        private static JiraRevision BuildCommentRevision(Comment c, string rc, JiraItem jiraItem)
         {
             var author = "NoAuthorDefined";
             if (c.AuthorUser is null)
@@ -252,7 +250,7 @@ namespace JiraExport
             {
                 Author = author,
                 Time = c.CreatedDate.Value,
-                Fields = new Dictionary<string, object>() { { "comment", c.Body }, { "comment$Rendered", rc.Value<string>() } },
+                Fields = new Dictionary<string, object>() { { "comment", c.Body }, { "comment$Rendered", rc } },
                 AttachmentActions = new List<RevisionAction<JiraAttachment>>(),
                 LinkActions = new List<RevisionAction<JiraLink>>()
             };
@@ -388,7 +386,8 @@ namespace JiraExport
                 Logger.Log(LogLevel.Error, $"Link change not handled!");
                 return null;
             }
-            var linkType = jira.GetLinkType(linkTypeString, targetItemKey);
+            bool inward = false;
+            var linkType = jira.GetLinkType(linkTypeString, targetItemKey, out inward);
             if (linkType == null)
             {
                 Logger.Log(LogLevel.Debug, $"Link with description '{linkTypeString}' is either not found or this issue ({sourceItemKey}) is not inward issue.");
@@ -396,12 +395,6 @@ namespace JiraExport
             }
             else
             {
-                if (linkType.Inward == linkType.Outward && sourceItemKey.CompareTo(targetItemKey) < 0)
-                {
-                    Logger.Log(LogLevel.Debug, $"Link is non-directional ({linkType.Name}) and sourceItem ({sourceItemKey}) is older then target item ({targetItemKey}). Link change will be part of target item.");
-                    return null;
-                }
-
                 return new RevisionAction<JiraLink>()
                 {
                     ChangeType = changeType,
@@ -410,6 +403,7 @@ namespace JiraExport
                         SourceItem = sourceItemKey,
                         TargetItem = targetItemKey,
                         LinkType = linkType.Name,
+                        IsInwardLink = inward
                     }
                 };
             }
@@ -467,7 +461,6 @@ namespace JiraExport
                         { "assignee", extractAccountIdOrUsername },
                         { "creator", extractAccountIdOrUsername },
                         { "reporter", extractAccountIdOrUsername},
-                        { jira.GetSettings().SprintField, t => string.Join(", ", ParseCustomField(jira.GetSettings().SprintField, t, jira)) },
                         { "status", extractName },
                         { "parent", t => t.ExValue<string>("$.key") },
                         { "issuetype", extractName },
@@ -532,17 +525,17 @@ namespace JiraExport
                 if (value != null)
                 {
                     fields[name] = value;
+                }
 
-                    if (renderedFields.TryGetValue(name, out JToken rendered))
+                if (renderedFields.TryGetValue(name, out JToken rendered))
+                {
+                    if (rendered.Type == JTokenType.String)
                     {
-                        if (rendered.Type == JTokenType.String)
-                        {
-                            fields[name + "$Rendered"] = rendered.Value<string>();
-                        }
-                        else
-                        {
-                            Logger.Log(LogLevel.Debug, $"Rendered field {name} contains unparsable type {rendered.Type.ToString()}, using text");
-                        }
+                        fields[name + "$Rendered"] = rendered.Value<string>();
+                    }
+                    else
+                    {
+                        Logger.Log(LogLevel.Debug, $"Rendered field {name} contains unparsable type {rendered.Type.ToString()}, using text");
                     }
                 }
             }

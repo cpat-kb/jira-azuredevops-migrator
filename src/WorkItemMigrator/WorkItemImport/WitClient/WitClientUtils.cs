@@ -57,7 +57,7 @@ namespace WorkItemImport
             return true;
         }
 
-        public bool AddAndSaveLink(WiLink link, WorkItem wi, Settings settings)
+        public bool AddAndSaveLink(WiLink link, WorkItem wi, Settings settings, string author, DateTime time)
         {
             if (link == null)
             {
@@ -86,7 +86,7 @@ namespace WorkItemImport
                     if (!IsDuplicateWorkItemLink(wi.Relations, relatedLink))
                     {
                         wi.Relations.Add(relatedLink);
-                        AddSingleLinkToWorkItemAndSave(link, wi, targetWorkItem, settings, "Imported link from JIRA");
+                        AddSingleLinkToWorkItemAndSave(link, wi, targetWorkItem, settings, "Imported link from JIRA", author, time);
                         return true;
                     }
                     return false;
@@ -98,11 +98,11 @@ namespace WorkItemImport
                     {
                         if (ex2.Message.Contains("TF201036: You cannot add a Child link between work items"))
                         {
-                            ForceSwapLinkAndSave(link, wi, ex2, settings, Forward, GetWorkItem(link.TargetWiId), "child");
+                            ForceSwapLinkAndSave(link, wi, ex2, settings, Forward, GetWorkItem(link.TargetWiId), "child", author, time);
                         }
                         else if (ex2.Message.Contains("TF201036: You cannot add a Parent link between work items"))
                         {
-                            ForceSwapLinkAndSave(link, wi, ex2, settings, Reverse, GetWorkItem(link.SourceWiId), "parent");
+                            ForceSwapLinkAndSave(link, wi, ex2, settings, Reverse, GetWorkItem(link.SourceWiId), "parent", author, time);
                         }
                         else
                         {
@@ -122,7 +122,7 @@ namespace WorkItemImport
 
         }
 
-        private void ForceSwapLinkAndSave(WiLink link, WorkItem wi, Exception ex2, Settings settings, string newLinkType, WorkItem wiTargetCurrent, string parentOrChild)
+        private void ForceSwapLinkAndSave(WiLink link, WorkItem wi, Exception ex2, Settings settings, string newLinkType, WorkItem wiTargetCurrent, string parentOrChild, string author, DateTime time)
         {
             Logger.Log(LogLevel.Warning, ex2.Message);
             Logger.Log(LogLevel.Warning, "Attempting to fix the above issue by removing the offending link and re-adding the correct link...");
@@ -140,12 +140,12 @@ namespace WorkItemImport
                         TargetWiId = int.Parse(relation.Url.Split('/').Last()),
                         WiType = "System.LinkTypes.Hierarchy-Reverse"
                     };
-                    RemoveAndSaveLink(linkToRemove, wiTargetCurrent, settings);
+                    RemoveAndSaveLink(linkToRemove, wiTargetCurrent, settings, author, time);
 
                     // Add new link again
                     var matchedRelations = wi.Relations.Where(r => r.Rel == "System.LinkTypes.Hierarchy-" + newLinkType && r.Url.Split('/').Last() == link.TargetWiId.ToString());
                     wi.Relations.Remove(matchedRelations.First());
-                    linkFixed = AddAndSaveLink(link, wi, settings);
+                    linkFixed = AddAndSaveLink(link, wi, settings, author, time);
                     break;
                 }
             }
@@ -161,7 +161,7 @@ namespace WorkItemImport
             }
         }
 
-        public bool RemoveAndSaveLink(WiLink link, WorkItem wi, Settings settings)
+        public bool RemoveAndSaveLink(WiLink link, WorkItem wi, Settings settings, string author, DateTime time)
         {
             if (link == null)
             {
@@ -181,7 +181,7 @@ namespace WorkItemImport
                 Logger.Log(LogLevel.Warning, $"{link} - cannot identify link to remove for '{wi.Id}'.");
                 return false;
             }
-            RemoveSingleLinkFromWorkItemAndSave(link, wi, settings);
+            RemoveSingleLinkFromWorkItemAndSave(link, wi, settings, author, time);
             wi.Relations.Remove(linkToRemove);
             return true;
         }
@@ -263,17 +263,7 @@ namespace WorkItemImport
             }
             if (!rev.Fields.HasAnyByRefName(WiFieldReference.ChangedDate))
             {
-                DateTime workItemChangedDate = (DateTime)(wi.Fields[WiFieldReference.ChangedDate]);
-                if (workItemChangedDate.ToUniversalTime() == rev.Time.ToUniversalTime())
-                {
-                    rev.Fields.Add(new WiField() { ReferenceName = WiFieldReference.ChangedDate, Value = rev.Time.AddMilliseconds(1).ToString("o") });
-                }
-                else
-                {
-                    // ADO can add a few milliseconds to work item createdDate when adding an attachment, hence adding more here to the revision time
-                    rev.Fields.Add(new WiField() { ReferenceName = WiFieldReference.ChangedDate, Value = rev.Time.AddMilliseconds(5).ToString("o") });
-                    wi.Fields[WiFieldReference.ChangedDate] = rev.Time.AddMilliseconds(5);
-                }
+                rev.Fields.Add(new WiField() { ReferenceName = WiFieldReference.ChangedDate, Value = rev.Time.ToString("o") });
             }
 
         }
@@ -754,24 +744,35 @@ namespace WorkItemImport
             {
                 string fileName = att.FilePath.Split('\\').Last() ?? string.Empty;
                 string encodedFileName = EncodeFileNameUsingJiraStandard(fileName);
-                string restApiUrlOption = "/rest/api/3/attachment/content/" + att.AttOriginId;
+                string restApiUrlOptionV2 = "/rest/api/2/attachment/content/" + att.AttOriginId;
+                string restApiUrlOptionV3 = "/rest/api/3/attachment/content/" + att.AttOriginId;
                 if (
                     textField.Contains(fileName)
                     || textField.IndexOf(encodedFileName, StringComparison.OrdinalIgnoreCase) >= 0
                     || textField.Contains("_thumb_" + att.AttOriginId)
-                    || textField.Contains(restApiUrlOption)
+                    || textField.Contains(restApiUrlOptionV2)
+                    || textField.Contains(restApiUrlOptionV3)
                 )
                 {
                     var tfsAtt = IdentifyAttachment(att, wi, isAttachmentMigratedDelegate);
 
                     if (tfsAtt != null)
                     {
-                        string imageSrcPattern = $"src.*?=.*?\"([^\"])(?=.*{att.AttOriginId}).*?\"";
-                        textField = Regex.Replace(textField, imageSrcPattern, $"src=\"{tfsAtt.Url}\"");
+                        string imageSrcPattern1 = $"src.*?=.*?\"([^\"])(?=.*{att.AttOriginId}).*?\"";
+                        textField = Regex.Replace(textField, imageSrcPattern1, $"src=\"{tfsAtt.Url}\"");
+
+                        string imageSrcPattern2 = $"!{att.FileName}!";
+                        textField = Regex.Replace(textField, imageSrcPattern2, $"<img src=\"{tfsAtt.Url}\"/>");
+
                         isUpdated = true;
                     }
-                    else
-                        Logger.Log(LogLevel.Warning, $"Attachment '{att}' referenced in text but is missing from work item {wiItem.OriginId}/{wi.Id}.");
+                    else if (wi.Relations.Where(r => r.Rel == "AttachedFile").Count() < 100) // Do not throw AttachmentNotFoundException if there are
+                                                                                             // 100 attachments (ADO attachment count limit/work item).
+                                                                                             // This means that some attachments could have been skipped.
+                    {
+                        Logger.Log(LogLevel.Warning, $"Attachment '{att}' referenced in text but is missing from work item {wiItem.OriginId}/{wi.Id}. This revision will be deferred until later.");
+                        throw new AttachmentNotFoundException("Attachment not found on work item");
+                    }
                 }
             }
             if (isUpdated)
@@ -1039,7 +1040,7 @@ namespace WorkItemImport
             wi.Relations = result.Relations;
         }
 
-        private void AddSingleLinkToWorkItemAndSave(WiLink link, WorkItem sourceWI, WorkItem targetWI, Settings settings, string comment)
+        private void AddSingleLinkToWorkItemAndSave(WiLink link, WorkItem sourceWI, WorkItem targetWI, Settings settings, string comment, string changedBy, DateTime changedDate)
         {
             // Create a patch document for a new work item.
             // Specify a relation to the existing work item.
@@ -1058,8 +1059,16 @@ namespace WorkItemImport
                             comment
                         }
                     }
-                }
+                },
+                JsonPatchDocUtils.CreateJsonFieldPatchOp(Operation.Add, WiFieldReference.ChangedDate, changedDate)
             };
+
+            if (!string.IsNullOrEmpty(changedBy))
+            {
+                linkPatchDocument.Add(
+                    JsonPatchDocUtils.CreateJsonFieldPatchOp(Operation.Add, WiFieldReference.ChangedBy, changedBy)
+                );
+            }
 
             if (sourceWI.Id.HasValue)
                 _witClientWrapper.UpdateWorkItem(linkPatchDocument, sourceWI.Id.Value, settings.SuppressNotifications);
@@ -1069,7 +1078,7 @@ namespace WorkItemImport
             Logger.Log(LogLevel.Info, $"Updated new work item Id:{sourceWI.Id} with link to work item ID:{targetWI.Id}");
         }
 
-        private void RemoveSingleLinkFromWorkItemAndSave(WiLink link, WorkItem sourceWI, Settings settings)
+        private void RemoveSingleLinkFromWorkItemAndSave(WiLink link, WorkItem sourceWI, Settings settings, string changedBy, DateTime changedDate)
         {
             WorkItemRelation rel = sourceWI.Relations.SingleOrDefault(a =>
                 a.Rel == link.WiType
@@ -1091,8 +1100,16 @@ namespace WorkItemImport
                 {
                     Operation = Operation.Remove,
                     Path = "/relations/"+relIndex
-                }
+                },
+                JsonPatchDocUtils.CreateJsonFieldPatchOp(Operation.Add, WiFieldReference.ChangedDate, changedDate)
             };
+
+            if (!string.IsNullOrEmpty(changedBy))
+            {
+                linkPatchDocument.Add(
+                    JsonPatchDocUtils.CreateJsonFieldPatchOp(Operation.Add, WiFieldReference.ChangedBy, changedBy)
+                );
+            }
 
             if (sourceWI.Id.HasValue)
                 _witClientWrapper.UpdateWorkItem(linkPatchDocument, sourceWI.Id.Value, settings.SuppressNotifications);
@@ -1120,6 +1137,7 @@ namespace WorkItemImport
             {
                 return wi.Relations.SingleOrDefault(
                     a => a.Rel == AttachedFile &&
+                    a.Url != null &&
                     a.Attributes[Comment].ToString().Split(
                         new string[] { ", original ID: " }, StringSplitOptions.None)[1] == att.AttOriginId
                 );

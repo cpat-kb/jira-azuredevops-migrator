@@ -3,6 +3,7 @@
     "target-project": "TargetProject",
     "query": "project=SourceProject ORDER BY Rank ASC",
     "using-jira-cloud": false,
+    "jira-api-version": 3,
     "workspace": "C:\\Temp\\JiraExport\\",
     "epic-link-field": "Epic Link",
     "sprint-field": "Sprint",
@@ -37,6 +38,10 @@
             {
                 "source": "Relates",
                 "target": "System.LinkTypes.Related"
+            },
+            {
+              "source": "Cloners",
+              "target": "System.LinkTypes.Related"
             },
             {
                 "source": "Duplicate",
@@ -194,10 +199,6 @@
                         },
                         {
                             "source": "Review",
-                            "target": "Resolved"
-                        },
-                        {
-                            "source": "Done",
                             "target": "Resolved"
                         },
                         {

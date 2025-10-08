@@ -245,6 +245,11 @@ namespace JiraExport
 
                     if (linkType != null)
                     {
+                        // If link is inward link, reverse the direction of the mapped link
+                        if (jiraLinkAction.Value.IsInwardLink)
+                        {
+                            linkType = GetReverseLinkTypeReferenceName(linkType);
+                        }
                         link.Change = changeType;
                         link.SourceOriginId = jiraLinkAction.Value.SourceItem;
                         link.TargetOriginId = jiraLinkAction.Value.TargetItem;
@@ -465,7 +470,8 @@ namespace JiraExport
             string valueStr = value.ToString();
             var fieldLimits = new Dictionary<string, int>()
             {
-                { WiFieldReference.Title, 255 }
+                { WiFieldReference.Title, 255 },
+                { WiFieldReference.Description, 1048576 }
             };
             if (fieldLimits.ContainsKey(field))
             {
@@ -478,6 +484,20 @@ namespace JiraExport
                 }
             }
             return valueStr;
+        }
+
+        private string GetReverseLinkTypeReferenceName(string referenceName)
+        {
+            string Forward = "Forward";
+            string Reverse = "Reverse";
+            if (referenceName.Contains(Forward))
+            {
+                return referenceName.Replace(Forward, Reverse);
+            }
+            else
+            {
+                return referenceName.Replace(Reverse, Forward);
+            }
         }
     }
 }
