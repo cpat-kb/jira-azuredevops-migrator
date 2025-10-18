@@ -37,7 +37,9 @@ namespace Migration.Jira_Export.Tests
             WiItem expectedWiItem = new WiItem
             {
                 Type = "User Story",
-                OriginId = "issue_key"
+                OriginId = "issue_key",
+                BacklogPriority = "1088341183.0",
+                StackRank = "1088341183.0"
             };
 
             JiraMapper sut = CreateJiraMapper();
@@ -49,6 +51,12 @@ namespace Migration.Jira_Export.Tests
             {
                 Assert.AreEqual(expected.OriginId, actual.OriginId);
                 Assert.AreEqual(expected.Type, actual.Type);
+                Assert.AreEqual(expected.BacklogPriority, actual.BacklogPriority);
+                Assert.AreEqual(expected.StackRank, actual.StackRank);
+                // Check that the first revision has the BacklogPriority and StackRank fields
+                var firstRevision = actual.Revisions.First();
+                Assert.IsTrue(firstRevision.Fields.Any(f => f.ReferenceName == WiFieldReference.BacklogPriority && f.Value.ToString() == expected.BacklogPriority));
+                Assert.IsTrue(firstRevision.Fields.Any(f => f.ReferenceName == WiFieldReference.StackRank && f.Value.ToString() == expected.StackRank));
             });
         }
 
@@ -234,6 +242,45 @@ namespace Migration.Jira_Export.Tests
             Assert.AreEqual(expected, actual);
         }
 
+        [Test]
+        public void When_calling_map_with_null_rank_Then_backlog_priority_defaults_to_max_value()
+        {
+            JiraItem jiraItem = CreateJiraItemWithNullRank();
+
+            JiraMapper sut = CreateJiraMapper();
+
+            WiItem actual = sut.Map(jiraItem);
+
+            Assert.Multiple(() =>
+            {
+                Assert.AreEqual(decimal.MaxValue.ToString(), actual.BacklogPriority);
+                Assert.AreEqual(decimal.MaxValue.ToString(), actual.StackRank);
+            });
+        }
+
+        private JiraItem CreateJiraItemWithNullRank()
+        {
+            var provider = _fixture.Freeze<IJiraProvider>();
+
+            var fields = JObject.Parse(@"{ 'issuetype': {'name': 'Story'} }"); // No customfield_10023
+            var renderedFields = JObject.Parse("{ 'custom_field_name': 'SomeValue', 'description': 'RenderedDescription' }");
+            string issueKey = "issue_key";
+
+            JObject remoteIssue = new JObject
+            {
+                { "fields", fields },
+                { "renderedFields", renderedFields },
+                { "key", issueKey }
+            };
+
+            provider.DownloadIssue(default).ReturnsForAnyArgs(remoteIssue);
+            provider.GetSettings().ReturnsForAnyArgs(CreateJiraSettings());
+
+            JiraItem jiraItem = JiraItem.CreateFromRest(issueKey, provider);
+
+            return jiraItem;
+        }
+
         private JiraSettings CreateJiraSettings()
         {
             JiraSettings settings = new JiraSettings("userID", "pass", "token", "url", "project")
@@ -303,12 +350,13 @@ namespace Migration.Jira_Export.Tests
             var provider = _fixture.Freeze<IJiraProvider>();
 
             var issueType = JObject.Parse(@"{ 'issuetype': {'name': 'Story'}}");
+            var fields = JObject.Parse(@"{ 'issuetype': {'name': 'Story'}, 'customfield_10023': '2|hzyxfj:' }");
             var renderedFields = JObject.Parse("{ 'custom_field_name': 'SomeValue', 'description': 'RenderedDescription' }");
             string issueKey = "issue_key";
 
             JObject remoteIssue = new JObject
             {
-                { "fields", issueType },
+                { "fields", fields },
                 { "renderedFields", renderedFields },
                 { "key", issueKey }
             };
