@@ -253,8 +253,8 @@ namespace Migration.Jira_Export.Tests
 
             Assert.Multiple(() =>
             {
-                Assert.AreEqual(decimal.MaxValue.ToString(), actual.BacklogPriority);
-                Assert.AreEqual(decimal.MaxValue.ToString(), actual.StackRank);
+                Assert.IsNull(actual.BacklogPriority);
+                Assert.IsNull(actual.StackRank);
             });
         }
 
@@ -285,8 +285,10 @@ namespace Migration.Jira_Export.Tests
         {
             JiraSettings settings = new JiraSettings("userID", "pass", "token", "url", "project")
             {
-                EpicLinkField = "Epic Link",
-                SprintField = "SprintField"
+                EpicLinkField = "EpicLinkField",
+                SprintField = "SprintField",
+                IncludeRank = true,
+                RankField = "customfield_10023"
             };
 
             return settings;

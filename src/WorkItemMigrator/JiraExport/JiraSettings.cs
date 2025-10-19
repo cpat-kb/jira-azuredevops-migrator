@@ -1,5 +1,4 @@
-﻿
-using Migration.Common.Config;
+﻿using Migration.Common.Config;
 using Newtonsoft.Json.Linq;
 
 namespace JiraExport
@@ -21,6 +20,9 @@ namespace JiraExport
         public bool IncludeDevelopmentLinks { get; set; }
         public int JiraApiVersion { get; set; }
         public RepositoryMap RepositoryMap { get; set; }
+
+        public bool IncludeRank { get; set; }
+        public string RankField { get; set; }
 
         public JiraSettings(string userID, string pass, string token, string url, string project)
         {

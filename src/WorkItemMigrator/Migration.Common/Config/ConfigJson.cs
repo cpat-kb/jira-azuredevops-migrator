@@ -93,5 +93,10 @@ namespace Common.Config
         [JsonProperty(PropertyName = "jira-api-version")]
         public int JiraApiVersion { get; set; } = 3;
 
+        [JsonProperty(PropertyName = "include-rank")]
+        public bool IncludeRank { get; set; } = false;
+
+        [JsonProperty(PropertyName = "rank-field")]
+        public string RankField { get; set; } = "customfield_10023";
     }
 }

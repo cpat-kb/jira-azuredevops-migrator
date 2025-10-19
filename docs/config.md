@@ -45,6 +45,8 @@ The migration configuration file is defined in a json file with the properties d
 |**type-map**|True|json|List of the work item **types** you want to migrate from Jira to Azure DevOps/TFS.|
 |**field-map**|True|json|List of **fields** you want to migrate from a Jira item to a Azure DevOps/TFS work item.|
 |**repository-map**|True|json|List of **repositories** you want to map from a bitbucket Azure DevOps/TFS. This enables migration of commit links, but only if the **include-development-links** property has been set to **true** and the git repositories have already been migrated from BitBucket to Azure DevOps.|
+|**include-rank**|False|boolean|Set to True to include rank field mapping from Jira to Azure DevOps Backlog Priority. Default = False.|
+|**rank-field**|False|string|Jira field name for the rank field. Default = "customfield_10023". **Note:** requires customization per Jira instance|
 
 ## Download options
 
@@ -146,6 +148,8 @@ Mappers are functions used byt he **Jira Exporter** for transforming the data in
   "base-area-path": "Migrated",
   "base-iteration-path": "Migrated",
   "ignore-failed-links": true,
+  "include-rank": true,
+  "rank-field": "customfield_10023"
   "process-template": "Scrum",
   "link-map": {
     "link": [
@@ -363,4 +367,3 @@ Mappers are functions used byt he **Jira Exporter** for transforming the data in
     ]
   }
 }
-```

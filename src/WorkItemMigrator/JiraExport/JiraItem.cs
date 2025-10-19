@@ -603,8 +603,12 @@ namespace JiraExport
         {
             get
             {
-                var rank = RemoteIssue.SelectToken("$.fields.customfield_10023")?.Value<string>();
-                return rank;
+                if (_provider.GetSettings().IncludeRank)
+                {
+                    var rank = RemoteIssue.SelectToken($"$.fields.{_provider.GetSettings().RankField}")?.Value<string>();
+                    return rank;
+                }
+                return null;
             }
         }
 

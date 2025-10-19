@@ -93,7 +93,9 @@ namespace JiraExport
                     UsingJiraCloud = config.UsingJiraCloud,
                     IncludeDevelopmentLinks = config.IncludeDevelopmentLinks,
                     RepositoryMap = config.RepositoryMap,
-                    JiraApiVersion = config.JiraApiVersion
+                    JiraApiVersion = config.JiraApiVersion,
+                    IncludeRank = config.IncludeRank,
+                    RankField = config.RankField
                 };
 
                 var jiraServiceWrapper = new JiraServiceWrapper(jiraSettings);
@@ -113,6 +115,12 @@ namespace JiraExport
                 if (string.IsNullOrEmpty(jiraSettings.SprintField))
                 {
                     Logger.Log(LogLevel.Warning, $"Sprint link field missing for config field '{config.SprintField}'.");
+                }
+
+                jiraSettings.RankField = jiraProvider.GetCustomId(config.RankField);
+                if (string.IsNullOrEmpty(jiraSettings.RankField))
+                {
+                    Logger.Log(LogLevel.Warning, $"Rank field missing for config field '{config.RankField}'.");
                 }
 
                 var mapper = new JiraMapper(jiraProvider, config, exportIssuesSummary);
